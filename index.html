@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>€ ↔ Monster Converter</title>
+  <meta name="description" content="Convert between euros and Monster Energy cans at the average NL price." />
+  <style>
+    :root{--bg:#0b0f12;--card:#12161b;--muted:#8aa0a8;--fg:#e6f1f5;--accent:#00ffa6;--accent2:#00e0ff;--ring:0 0 0 2px color-mix(in oklab,var(--accent) 40%,transparent)}
+    *{box-sizing:border-box}html,body{height:100%}
+    body{margin:0;background:radial-gradient(1200px 600px at 120% -10%,#122 10%,transparent 60%),var(--bg);color:var(--fg);font:16px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;display:grid;place-items:center;padding:24px}
+    .wrap{width:min(820px,100%);display:grid;gap:16px}
+    header{display:flex;align-items:center;gap:10px}
+    .badge{border:1px solid #1e2a31;color:var(--accent);padding:.25rem .5rem;border-radius:999px;background:linear-gradient(180deg,#0e1419,#0b0f12);box-shadow:inset 0 0 0 1px #0b3230}
+    h1{margin:0;font-size:clamp(20px,4.5vw,34px);letter-spacing:.5px}
+    .card{background:linear-gradient(180deg,#0e1318,#0c1116);border:1px solid #1d2730;border-radius:16px;box-shadow:0 0 0 1px #0b1a1a inset,0 15px 40px rgba(0,0,0,.4)}
+    .grid{display:grid;gap:12px;padding:16px}
+    .row{display:grid;gap:10px}
+    @media(min-width:720px){.row{grid-template-columns:1fr 1fr}}
+    label{font-size:.9rem;color:var(--muted);display:flex;align-items:center;gap:8px}
+    input[type="number"]{width:100%;padding:.9rem 1rem;border-radius:12px;background:#0a0f13;color:var(--fg);border:1px solid #1f2a33;outline:none}
+    input[type="number"]:focus{box-shadow:var(--ring);border-color:#276b74}
+    .unit{opacity:.8}.hint{font-size:.85rem;color:var(--muted)}
+    .rate{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .chip{border:1px dashed #244a4f;border-radius:999px;padding:.35rem .6rem;color:var(--accent2)}
+    .controls{display:flex;gap:10px;flex-wrap:wrap}
+    .sw{display:inline-flex;align-items:center;gap:8px;padding:.5rem .75rem;border:1px solid #27323a;border-radius:12px}
+    .price{display:flex;gap:8px;align-items:center}
+    footer{opacity:.75;text-align:center;font-size:.85rem;margin-top:6px}
+    a{color:var(--accent2);text-decoration:none;border-bottom:1px dotted #215b64}
+    a:hover{filter:brightness(1.1)}
+    .mono{font-feature-settings:"ss01" 1}
+    /* Tiny share button */
+    .share{position:fixed;right:16px;bottom:16px;display:inline-flex;align-items:center;justify-content:center;
+      width:40px;height:40px;border-radius:999px;border:1px solid #1d2730;background:#0d1318;box-shadow:0 6px 18px rgba(0,0,0,.45),inset 0 0 0 1px #0b1a1a;color:var(--accent2);
+      opacity:.78;backdrop-filter:saturate(140%);cursor:pointer}
+    .share:hover{opacity:1;transform:translateY(-1px)}
+    .toast{position:fixed;right:16px;bottom:64px;background:#0e1419;border:1px solid #23313a;border-radius:10px;padding:.45rem .6rem;font-size:.85rem;color:var(--fg);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;transform:translateY(6px)}
+    .toast.show{opacity:1;transform:translateY(0)}
+  </style>
+</head>
+<body>
+  <main class="wrap" role="main">
+    <header>
+      <h1>How many <span class="unit">Monsters</span> is that in <span class="unit">EUR</span>?</h1>
+    </header>
+
+    <section class="card grid" aria-labelledby="converter">
+      <div class="row">
+        <div>
+          <label for="eur">Amount in EUR</label>
+          <input id="eur" inputmode="decimal" type="number" step="0.01" min="0" placeholder="e.g. 10.00" autocomplete="off">
+          <div class="hint">Type euros → get cans</div>
+        </div>
+        <div>
+          <label for="mon">Amount in Monsters (cans)</label>
+          <input id="mon" inputmode="decimal" type="number" step="0.01" min="0" placeholder="e.g. 4" autocomplete="off">
+          <div class="hint">Type cans → get euros</div>
+        </div>
+      </div>
+
+      <div class="rate">
+        <span class="chip mono" id="rateText">1 can ≈ €2.29</span>
+        <div class="controls">
+          <label class="sw" title="Include NL €0.15 deposit per can">
+            <input id="deposit" type="checkbox" /> Include deposit
+          </label>
+          <label class="sw price">
+            <span>Set price:</span>
+            <input id="price" type="number" step="0.01" min="0.10" value="2.29" style="width:8rem" />
+            <span>€/can</span>
+          </label>
+        </div>
+      </div>
+      <div class="hint">Default price is the typical Dutch supermarket shelf price for a 500 ml can. Adjust if your shop differs.</div>
+    </section>
+
+    <footer>
+      Built by <a href="https://bjarne.verschorre.be">Bjarne Verschorre</a>
+    </footer>
+  </main>
+
+  <!-- Tiny share button + toast -->
+  <button id="share" class="share" aria-label="Share result" title="Share result">🔗</button>
+  <div id="toast" class="toast" role="status" aria-live="polite">Link copied</div>
+
+  <script>
+    (function(){
+      const qs=id=>document.getElementById(id);
+      const eur=qs('eur'), mon=qs('mon'), price=qs('price'), dep=qs('deposit'), rateText=qs('rateText');
+      const shareBtn=qs('share'), toast=qs('toast');
+      const LS="monster-eur-conv.v1";
+      const saved=JSON.parse(localStorage.getItem(LS)||"{}");
+      if(saved.p) price.value = +saved.p;
+      if(saved.d) dep.checked = true;
+
+      const fmtE = v => isFinite(v)? (Math.round(v*100)/100).toFixed(2):"";
+      const clamp = v => Math.min(1e9, Math.max(0, v||0));
+
+      function effPrice(){ const base=+price.value||0; return dep.checked ? base + 0.15 : base }
+      function refreshRate(){ rateText.textContent = `1 can ≈ €${fmtE(effPrice())}` }
+
+      function sync(from){
+        const p = effPrice(); if(p<=0) return;
+        if(from==="eur"){
+          const cans = clamp(eur.valueAsNumber) / p;
+          mon.value = cans ? (Math.round(cans*100)/100).toString() : "";
+        }else if(from==="mon"){
+          const euros = clamp(mon.valueAsNumber) * p;
+          eur.value = euros ? fmtE(euros) : "";
+        }
+      }
+
+      function stateURL(){
+        const u = new URL(location.href);
+        const s = new URLSearchParams();
+        if(eur.value) s.set("eur", eur.value);
+        if(mon.value) s.set("mon", mon.value);
+        s.set("price", (+price.value||2.29).toString());
+        if(dep.checked) s.set("deposit","1");
+        u.search = s.toString(); 
+        return u.toString();
+      }
+
+      function summary(){
+        const p = effPrice();
+        const parts = [];
+        if(eur.value) parts.push(`€${fmtE(+eur.value)}`);
+        if(mon.value) parts.push(`${mon.value} cans`);
+        const depTxt = dep.checked? " (incl. €0.15 deposit)":"";
+        return `Monster Math: ${parts.join(" ⇄ ")} @ €${fmtE(p)}/can${depTxt}`;
+      }
+
+      function showToast(msg="Link copied"){
+        toast.textContent=msg;
+        toast.classList.add("show");
+        clearTimeout(showToast.t); showToast.t=setTimeout(()=>toast.classList.remove("show"),1400);
+      }
+
+      
+      shareBtn.addEventListener("click", async ()=> {
+        const url = stateURL();
+        const text = summary();
+        try{
+          if(navigator.share){ 
+            await navigator.share({title:"€ ↔ Monster Converter", text, url});
+            return;
+          }
+        }catch(_){} 
+        try{ 
+          if(navigator.clipboard && navigator.clipboard.writeText){
+            await navigator.clipboard.writeText(`${text}\n${url}`);
+            showToast();
+          } else {
+            
+            prompt("Copy this link:", url);
+          }
+        }catch(e){ prompt("Copy this link:", url) }
+      });
+
+      
+      ['input','change'].forEach(ev=>{
+        eur.addEventListener(ev, ()=>sync("eur"));
+        mon.addEventListener(ev, ()=>sync("mon"));
+      });
+      [price,dep].forEach(el=>{
+        ['input','change'].forEach(ev=>el.addEventListener(ev, ()=>{
+          refreshRate(); sync("eur");
+          localStorage.setItem(LS, JSON.stringify({p:+price.value, d:dep.checked?1:0}));
+        }));
+      });
+
+      
+      (function initFromURL(){
+        const sp = new URLSearchParams(location.search);
+        if(sp.has("price")) price.value = +sp.get("price") || +price.value;
+        if(sp.get("deposit")==="1") dep.checked = true;
+        if(sp.has("eur")) eur.value = sp.get("eur");
+        if(sp.has("mon")) mon.value = sp.get("mon");
+      })();
+
+      refreshRate(); 
+    })();
+  </script>
+</body>
+</html>
